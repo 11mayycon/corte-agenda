@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { clienteAPI, type Loja, type Servico } from "@/services/clienteAPI";
+import { clienteAPI, type Loja, type Servico, type HorarioDisponivel } from "@/services/clienteAPI";
+import { useAuthContext } from "@/contexts/AuthContext";
 
 const steps = [
   { id: 1, title: "Local", icon: Store },
@@ -30,13 +31,14 @@ const steps = [
 
 export default function ClienteAgendar() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
   // Dados
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
-  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<HorarioDisponivel[]>([]);
 
   // Seleções
   const [selectedLoja, setSelectedLoja] = useState<Loja | null>(null);
@@ -53,7 +55,9 @@ export default function ClienteAgendar() {
 
   useEffect(() => {
     if (selectedLoja) {
-      loadServicos(selectedLoja.id);
+      // Services come from the loja object
+      const lojaServicos = (selectedLoja as any).servicos || [];
+      setServicos(lojaServicos.filter((s: Servico) => s.ativo));
     }
   }, [selectedLoja]);
 
@@ -72,23 +76,14 @@ export default function ClienteAgendar() {
     setLoading(false);
   };
 
-  const loadServicos = async (lojaId: string) => {
-    setLoading(true);
-    const { data } = await clienteAPI.getServicosLoja(lojaId);
-    if (data) {
-      setServicos(data);
-    }
-    setLoading(false);
-  };
-
   const loadHorariosDisponiveis = async () => {
     if (!selectedLoja || !selectedServico || !selectedData) return;
 
     setLoading(true);
     const { data } = await clienteAPI.getHorariosDisponiveis(
       selectedLoja.id,
-      selectedServico.id,
-      selectedData
+      selectedData,
+      selectedServico.id
     );
     if (data) {
       setHorariosDisponiveis(data);
@@ -102,12 +97,19 @@ export default function ClienteAgendar() {
       return;
     }
 
+    if (!user) {
+      toast.error("Você precisa estar logado para agendar");
+      navigate("/login/usuario");
+      return;
+    }
+
     setLoading(true);
-    const { data, error } = await clienteAPI.createAgendamento({
+    const { data, error } = await clienteAPI.criarAgendamento({
       loja_id: selectedLoja.id,
       servico_id: selectedServico.id,
       data: selectedData,
       hora: selectedHora,
+      user_id: user.id,
     });
 
     setLoading(false);
@@ -383,14 +385,14 @@ export default function ClienteAgendar() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                    {horariosDisponiveis.map((hora) => (
+                    {horariosDisponiveis.filter(h => h.disponivel).map((h) => (
                       <Button
-                        key={hora}
-                        variant={selectedHora === hora ? "default" : "outline"}
+                        key={h.horario}
+                        variant={selectedHora === h.horario ? "default" : "outline"}
                         className="w-full"
-                        onClick={() => setSelectedHora(hora)}
+                        onClick={() => setSelectedHora(h.horario)}
                       >
-                        {hora}
+                        {h.horario}
                       </Button>
                     ))}
                   </div>
