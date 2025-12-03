@@ -37,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuthContext } from "@/contexts/AuthContext";
 
 interface Agendamento {
   id: string;
@@ -47,16 +48,11 @@ interface Agendamento {
   hora: string;
   status: "pendente" | "confirmado" | "cancelado" | "concluido" | "nao_compareceu";
   observacoes: string | null;
-  criado_em: string;
+  created_at: string;
   servico?: {
     nome: string;
-    preco_centavos: number;
+    preco_centavos: number | null;
     duracao_minutos: number;
-  };
-  usuario?: {
-    nome: string;
-    email: string;
-    telefone: string;
   };
 }
 
@@ -69,6 +65,7 @@ const statusConfig = {
 };
 
 export default function LojaAgenda() {
+  const { user } = useAuthContext();
   const [loading, setLoading] = useState(true);
   const [lojaId, setLojaId] = useState<string | null>(null);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
@@ -81,7 +78,7 @@ export default function LojaAgenda() {
 
   useEffect(() => {
     loadLojaId();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (lojaId) {
@@ -90,17 +87,28 @@ export default function LojaAgenda() {
   }, [lojaId, selectedDate, statusFilter]);
 
   const loadLojaId = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Try to get loja from usuarios_lojas
     const { data } = await supabase
-      .from('lojas')
-      .select('id')
+      .from('usuarios_lojas')
+      .select('loja_id')
       .eq('user_id', user.id)
       .single();
 
     if (data) {
-      setLojaId(data.id);
+      setLojaId(data.loja_id);
+    } else {
+      // Fallback for demo
+      const { data: lojas } = await supabase
+        .from('lojas')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      if (lojas) {
+        setLojaId(lojas.id);
+      }
     }
   };
 
@@ -114,8 +122,7 @@ export default function LojaAgenda() {
       .from('agendamentos')
       .select(`
         *,
-        servico:servicos!inner(nome, preco_centavos, duracao_minutos),
-        usuario:usuarios!inner(nome, email, telefone)
+        servico:servicos(nome, preco_centavos, duracao_minutos)
       `)
       .eq('loja_id', lojaId)
       .eq('data', dataStr)
@@ -128,7 +135,7 @@ export default function LojaAgenda() {
     const { data, error } = await query;
 
     if (!error && data) {
-      setAgendamentos(data as any);
+      setAgendamentos(data as Agendamento[]);
     }
     setLoading(false);
   };
@@ -165,11 +172,11 @@ export default function LojaAgenda() {
     setSelectedDate(newDate);
   };
 
-  const formatPrice = (cents: number) => {
+  const formatPrice = (cents: number | null) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
-    }).format(cents / 100);
+    }).format((cents || 0) / 100);
   };
 
   const goToToday = () => {
@@ -324,7 +331,7 @@ export default function LojaAgenda() {
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <div>
                               <h4 className="font-semibold text-base truncate">
-                                {agendamento.usuario?.nome || 'Cliente'}
+                                Cliente #{agendamento.user_id.substring(0, 8)}
                               </h4>
                               <p className="text-sm text-muted-foreground flex items-center gap-1">
                                 <Scissors className="h-3.5 w-3.5" />
@@ -346,12 +353,6 @@ export default function LojaAgenda() {
                               <DollarSign className="h-3.5 w-3.5" />
                               {formatPrice(agendamento.servico?.preco_centavos || 0)}
                             </span>
-                            {agendamento.usuario?.telefone && (
-                              <span className="flex items-center gap-1">
-                                <Phone className="h-3.5 w-3.5" />
-                                {agendamento.usuario.telefone}
-                              </span>
-                            )}
                           </div>
 
                           {agendamento.observacoes && (
@@ -382,33 +383,6 @@ export default function LojaAgenda() {
 
           {selectedAgendamento && (
             <div className="space-y-4 py-4">
-              {/* Cliente */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">Cliente</h4>
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  <div className="h-10 w-10 rounded-full bg-primary-light flex items-center justify-center">
-                    <span className="text-sm font-semibold text-primary">
-                      {selectedAgendamento.usuario?.nome?.substring(0, 2).toUpperCase() || 'CL'}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium">{selectedAgendamento.usuario?.nome || 'Cliente'}</p>
-                    {selectedAgendamento.usuario?.email && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                        <Mail className="h-3 w-3" />
-                        {selectedAgendamento.usuario.email}
-                      </p>
-                    )}
-                    {selectedAgendamento.usuario?.telefone && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {selectedAgendamento.usuario.telefone}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {/* Serviço */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-muted-foreground">Serviço</h4>
@@ -461,54 +435,65 @@ export default function LojaAgenda() {
                 </Badge>
               </div>
 
-              {/* Alterar Status */}
-              {selectedAgendamento.status !== "cancelado" && selectedAgendamento.status !== "concluido" && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-muted-foreground">Alterar Status</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAgendamento.status !== "confirmado" && (
+              {/* Ações */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Alterar Status</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedAgendamento.status === "pendente" && (
+                    <>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="default"
                         onClick={() => handleUpdateStatus(selectedAgendamento.id, "confirmado")}
-                        className="gap-2"
+                        className="gap-1"
                       >
-                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <CheckCircle className="h-3.5 w-3.5" />
                         Confirmar
                       </Button>
-                    )}
-                    {selectedAgendamento.status === "confirmado" && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "concluido")}
-                        className="gap-2"
+                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "cancelado")}
+                        className="gap-1 text-destructive"
                       >
-                        <CheckCircle className="h-4 w-4 text-blue-600" />
+                        <XCircle className="h-3.5 w-3.5" />
+                        Cancelar
+                      </Button>
+                    </>
+                  )}
+                  {selectedAgendamento.status === "confirmado" && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "concluido")}
+                        className="gap-1"
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
                         Concluir
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleUpdateStatus(selectedAgendamento.id, "nao_compareceu")}
-                      className="gap-2"
-                    >
-                      <XCircle className="h-4 w-4 text-red-600" />
-                      Não Compareceu
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleUpdateStatus(selectedAgendamento.id, "cancelado")}
-                      className="gap-2"
-                    >
-                      <XCircle className="h-4 w-4 text-gray-600" />
-                      Cancelar
-                    </Button>
-                  </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "nao_compareceu")}
+                        className="gap-1"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Não Compareceu
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "cancelado")}
+                        className="gap-1 text-destructive"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Cancelar
+                      </Button>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 

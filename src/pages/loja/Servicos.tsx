@@ -51,17 +51,29 @@ export default function LojaServicos() {
   const loadLojaId = async () => {
     if (!user) return;
 
-    // Buscar a loja do usuário atual
+    // Buscar a loja associada ao usuário via usuarios_lojas
     const { data, error } = await supabase
-      .from('lojas')
-      .select('id')
+      .from('usuarios_lojas')
+      .select('loja_id')
       .eq('user_id', user.id)
       .single();
 
     if (!error && data) {
-      setLojaId(data.id);
+      setLojaId(data.loja_id);
     } else {
-      toast.error('Loja não encontrada. Configure sua loja primeiro.');
+      // Fallback: buscar primeira loja disponível para demonstração
+      const { data: lojas } = await supabase
+        .from('lojas')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      if (lojas) {
+        setLojaId(lojas.id);
+      } else {
+        toast.error('Nenhuma loja encontrada. Configure sua loja primeiro.');
+        setLoading(false);
+      }
     }
   };
 
@@ -76,11 +88,11 @@ export default function LojaServicos() {
     setLoading(false);
   };
 
-  const formatPrice = (cents: number) => {
+  const formatPrice = (cents: number | null) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
-    }).format(cents / 100);
+    }).format((cents || 0) / 100);
   };
 
   const handleOpenDialog = (servico?: Servico) => {
@@ -304,7 +316,7 @@ export default function LojaServicos() {
                             </span>
                             <span className="flex items-center gap-1 font-semibold text-primary">
                               <DollarSign className="h-3.5 w-3.5" />
-                              {formatPrice(servico.preco_centavos || 0)}
+                              {formatPrice(servico.preco_centavos)}
                             </span>
                             {servico.categoria && (
                               <Badge variant="secondary" className="text-xs">
@@ -368,7 +380,7 @@ export default function LojaServicos() {
                             </span>
                             <span className="flex items-center gap-1">
                               <DollarSign className="h-3.5 w-3.5" />
-                              {formatPrice(servico.preco_centavos || 0)}
+                              {formatPrice(servico.preco_centavos)}
                             </span>
                           </div>
                         </div>
@@ -468,7 +480,7 @@ export default function LojaServicos() {
               Cancelar
             </Button>
             <Button onClick={handleSave}>
-              {editingServico ? "Salvar Alterações" : "Criar Serviço"}
+              {editingServico ? "Salvar" : "Criar"}
             </Button>
           </DialogFooter>
         </DialogContent>

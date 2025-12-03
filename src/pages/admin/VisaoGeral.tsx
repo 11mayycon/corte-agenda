@@ -10,7 +10,6 @@ import {
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
-  DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,19 +56,16 @@ export default function AdminVisaoGeral() {
     try {
       setLoading(true);
 
-      // Buscar estatísticas gerais
-      const [lojasResult, usuariosResult, agendamentosResult] = await Promise.all([
+      // Buscar estatísticas gerais das tabelas que existem
+      const [lojasResult, agendamentosResult] = await Promise.all([
         supabase.from('lojas').select('id, created_at'),
-        supabase.from('usuarios').select('id, tipo, status, created_at'),
         supabase.from('agendamentos').select('id, created_at, status')
       ]);
 
       if (lojasResult.error) throw lojasResult.error;
-      if (usuariosResult.error) throw usuariosResult.error;
       if (agendamentosResult.error) throw agendamentosResult.error;
 
       const lojas = lojasResult.data || [];
-      const usuarios = usuariosResult.data || [];
       const agendamentos = agendamentosResult.data || [];
 
       // Calcular estatísticas
@@ -78,7 +74,6 @@ export default function AdminVisaoGeral() {
       const mesPassado = mesAtual === 0 ? 11 : mesAtual - 1;
 
       const lojasAtivas = lojas.length;
-      const usuariosAtivos = usuarios.filter(u => u.status === 'ativo').length;
 
       const agendamentosMes = agendamentos.filter(a => {
         const agData = new Date(a.created_at);
@@ -97,24 +92,18 @@ export default function AdminVisaoGeral() {
       setStats({
         total_lojas: lojas.length,
         lojas_ativas: lojasAtivas,
-        total_usuarios: usuarios.length,
-        usuarios_ativos: usuariosAtivos,
+        total_usuarios: 0, // Not available without usuarios table
+        usuarios_ativos: 0,
         total_agendamentos: agendamentos.length,
         agendamentos_mes: agendamentosMes,
-        receita_total: 0, // Implementar quando tiver sistema de pagamentos
+        receita_total: 0,
         taxa_crescimento: Math.round(taxaCrescimento)
       });
 
-      // Buscar lojas recentes com contagem de agendamentos
+      // Buscar lojas recentes
       const { data: recentLojas, error: lojasError } = await supabase
         .from('lojas')
-        .select(`
-          id,
-          nome,
-          cidade,
-          created_at,
-          agendamentos(count)
-        `)
+        .select('id, nome, cidade, created_at')
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -125,29 +114,12 @@ export default function AdminVisaoGeral() {
         nome: loja.nome,
         cidade: loja.cidade,
         status: 'ativa',
-        agendamentos_count: loja.agendamentos?.[0]?.count || 0,
+        agendamentos_count: 0,
         created_at: loja.created_at || ''
       })) || []);
 
-      // Buscar atividades recentes
-      const { data: logs, error: logsError } = await supabase
-        .from('logs_auditoria')
-        .select('*')
-        .order('criado_em', { ascending: false })
-        .limit(5);
-
-      if (!logsError && logs) {
-        setAtividades(logs.map(log => {
-          const tempo = getTempoDecorrido(log.criado_em);
-          return {
-            id: log.id,
-            acao: formatarAcao(log.acao, log.tabela),
-            descricao: log.user_nome || 'Usuário desconhecido',
-            tempo,
-            user_nome: log.user_nome
-          };
-        }));
-      }
+      // Mock atividades recentes (since logs_auditoria doesn't exist)
+      setAtividades([]);
 
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
@@ -155,36 +127,6 @@ export default function AdminVisaoGeral() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatarAcao = (acao: string, tabela: string): string => {
-    const acoes: Record<string, string> = {
-      'CRIAR': 'Criou',
-      'ATUALIZAR': 'Atualizou',
-      'DELETAR': 'Deletou',
-      'RESETAR_SENHA': 'Resetou senha'
-    };
-    const tabelas: Record<string, string> = {
-      'usuarios': 'usuário',
-      'lojas': 'loja',
-      'servicos': 'serviço',
-      'agendamentos': 'agendamento'
-    };
-    return `${acoes[acao] || acao} ${tabelas[tabela] || tabela}`;
-  };
-
-  const getTempoDecorrido = (dataStr: string): string => {
-    const data = new Date(dataStr);
-    const agora = new Date();
-    const diffMs = agora.getTime() - data.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return 'agora';
-    if (diffMins < 60) return `${diffMins} min`;
-    const diffHoras = Math.floor(diffMins / 60);
-    if (diffHoras < 24) return `${diffHoras}h`;
-    const diffDias = Math.floor(diffHoras / 24);
-    return `${diffDias}d`;
   };
 
   const kpis: KPI[] = stats ? [
@@ -199,7 +141,7 @@ export default function AdminVisaoGeral() {
     {
       label: "Usuários Ativos",
       value: stats.usuarios_ativos > 999 ? `${(stats.usuarios_ativos / 1000).toFixed(1)}k` : stats.usuarios_ativos.toString(),
-      change: `${Math.round((stats.usuarios_ativos / stats.total_usuarios) * 100)}%`,
+      change: stats.total_usuarios > 0 ? `${Math.round((stats.usuarios_ativos / stats.total_usuarios) * 100)}%` : '0%',
       trend: "up",
       icon: Users,
       color: "secondary",

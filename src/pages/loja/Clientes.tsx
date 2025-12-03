@@ -24,6 +24,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthContext } from "@/contexts/AuthContext";
 
 interface Cliente {
   id: string;
@@ -43,11 +44,12 @@ interface AgendamentoCliente {
   status: string;
   servico: {
     nome: string;
-    preco_centavos: number;
+    preco_centavos: number | null;
   };
 }
 
 export default function LojaClientes() {
+  const { user } = useAuthContext();
   const [loading, setLoading] = useState(true);
   const [lojaId, setLojaId] = useState<string | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -60,7 +62,7 @@ export default function LojaClientes() {
 
   useEffect(() => {
     loadLojaId();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (lojaId) {
@@ -69,17 +71,27 @@ export default function LojaClientes() {
   }, [lojaId]);
 
   const loadLojaId = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data } = await supabase
-      .from('lojas')
-      .select('id')
+      .from('usuarios_lojas')
+      .select('loja_id')
       .eq('user_id', user.id)
       .single();
 
     if (data) {
-      setLojaId(data.id);
+      setLojaId(data.loja_id);
+    } else {
+      // Fallback for demo
+      const { data: lojas } = await supabase
+        .from('lojas')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      if (lojas) {
+        setLojaId(lojas.id);
+      }
     }
   };
 
@@ -88,7 +100,7 @@ export default function LojaClientes() {
 
     setLoading(true);
 
-    // Buscar todos os agendamentos do salão com dados dos clientes
+    // Buscar todos os agendamentos do salão
     const { data: agendamentos } = await supabase
       .from('agendamentos')
       .select(`
@@ -96,13 +108,12 @@ export default function LojaClientes() {
         data,
         hora,
         status,
-        servico:servicos!inner(preco_centavos),
-        usuario:usuarios!inner(nome, email, telefone)
+        servico:servicos(preco_centavos)
       `)
       .eq('loja_id', lojaId);
 
     if (agendamentos) {
-      // Agrupar por cliente
+      // Agrupar por cliente (user_id)
       const clientesMap = new Map<string, Cliente>();
 
       agendamentos.forEach((ag: any) => {
@@ -111,9 +122,9 @@ export default function LojaClientes() {
         if (!clientesMap.has(userId)) {
           clientesMap.set(userId, {
             id: userId,
-            nome: ag.usuario.nome,
-            email: ag.usuario.email,
-            telefone: ag.usuario.telefone,
+            nome: `Cliente ${userId.substring(0, 8)}`,
+            email: '',
+            telefone: '',
             total_agendamentos: 0,
             ultimo_agendamento: null,
             valor_total_centavos: 0,
@@ -125,7 +136,7 @@ export default function LojaClientes() {
         // Contar agendamentos concluídos
         if (ag.status === 'concluido') {
           cliente.total_agendamentos++;
-          cliente.valor_total_centavos += ag.servico.preco_centavos || 0;
+          cliente.valor_total_centavos += ag.servico?.preco_centavos || 0;
         }
 
         // Atualizar último agendamento
@@ -137,7 +148,7 @@ export default function LojaClientes() {
 
       // Converter para array e ordenar por total de agendamentos
       const clientesArray = Array.from(clientesMap.values())
-        .filter(c => c.total_agendamentos > 0) // Só mostrar clientes com agendamentos concluídos
+        .filter(c => c.total_agendamentos > 0)
         .sort((a, b) => b.total_agendamentos - a.total_agendamentos);
 
       setClientes(clientesArray);
@@ -160,12 +171,11 @@ export default function LojaClientes() {
         data,
         hora,
         status,
-        servico:servicos!inner(nome, preco_centavos)
+        servico:servicos(nome, preco_centavos)
       `)
       .eq('loja_id', lojaId)
       .eq('user_id', cliente.id)
       .order('data', { ascending: false })
-      .order('hora', { ascending: false })
       .limit(10);
 
     if (agendamentos) {
@@ -312,9 +322,6 @@ export default function LojaClientes() {
                         Cliente
                       </th>
                       <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                        Contato
-                      </th>
-                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
                         Última Visita
                       </th>
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground">
@@ -347,20 +354,6 @@ export default function LojaClientes() {
                             </div>
                             <span className="font-medium">{cliente.nome}</span>
                           </div>
-                        </td>
-                        <td className="py-3 px-4 text-muted-foreground text-sm">
-                          {cliente.telefone && (
-                            <div className="flex items-center gap-1">
-                              <Phone className="h-3.5 w-3.5" />
-                              {cliente.telefone}
-                            </div>
-                          )}
-                          {cliente.email && (
-                            <div className="flex items-center gap-1 text-xs">
-                              <Mail className="h-3 w-3" />
-                              {cliente.email}
-                            </div>
-                          )}
                         </td>
                         <td className="py-3 px-4 text-muted-foreground">
                           {formatDate(cliente.ultimo_agendamento)}
@@ -405,12 +398,6 @@ export default function LojaClientes() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold truncate">{cliente.nome}</h3>
-                          {cliente.telefone && (
-                            <p className="text-sm text-muted-foreground flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {cliente.telefone}
-                            </p>
-                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-4 text-sm">
@@ -464,78 +451,73 @@ export default function LojaClientes() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold">{selectedCliente.nome}</h3>
-                  {selectedCliente.telefone && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5" />
-                      {selectedCliente.telefone}
-                    </p>
-                  )}
-                  {selectedCliente.email && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Mail className="h-3.5 w-3.5" />
-                      {selectedCliente.email}
-                    </p>
-                  )}
                 </div>
               </div>
 
               {/* Estatísticas */}
               <div className="grid grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-muted/50 rounded-lg">
-                  <p className="text-2xl font-bold text-primary">{selectedCliente.total_agendamentos}</p>
-                  <p className="text-sm text-muted-foreground">Visitas</p>
-                </div>
-                <div className="text-center p-4 bg-muted/50 rounded-lg">
-                  <p className="text-2xl font-bold text-primary">{formatPrice(selectedCliente.valor_total_centavos)}</p>
-                  <p className="text-sm text-muted-foreground">Total Gasto</p>
-                </div>
-                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
                   <p className="text-2xl font-bold text-primary">
-                    {formatPrice(selectedCliente.total_agendamentos > 0
-                      ? selectedCliente.valor_total_centavos / selectedCliente.total_agendamentos
-                      : 0)}
+                    {selectedCliente.total_agendamentos}
                   </p>
-                  <p className="text-sm text-muted-foreground">Ticket Médio</p>
+                  <p className="text-xs text-muted-foreground">Visitas</p>
+                </div>
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold text-primary">
+                    {formatPrice(selectedCliente.valor_total_centavos)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Total Gasto</p>
+                </div>
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold text-primary">
+                    {selectedCliente.total_agendamentos > 0
+                      ? formatPrice(selectedCliente.valor_total_centavos / selectedCliente.total_agendamentos)
+                      : 'R$ 0'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Ticket Médio</p>
                 </div>
               </div>
 
-              {/* Histórico de Agendamentos */}
-              <div>
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Últimos Agendamentos</h4>
+              {/* Histórico */}
+              <div className="space-y-3">
+                <h4 className="font-medium">Últimas Visitas</h4>
                 {loadingDetalhes ? (
                   <div className="space-y-2">
-                    {[1, 2, 3].map(i => (
-                      <Skeleton key={i} className="h-20 w-full" />
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-lg" />
                     ))}
                   </div>
-                ) : selectedCliente.agendamentos && selectedCliente.agendamentos.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedCliente.agendamentos.map((ag) => (
-                      <div key={ag.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">
-                              {new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR')} - {ag.hora}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{ag.servico.nome}</p>
-                        </div>
-                        <div className="text-right">
-                          <Badge variant={statusConfig[ag.status]?.variant || "secondary"} className="mb-1">
-                            {statusConfig[ag.status]?.label || ag.status}
-                          </Badge>
-                          <p className="text-sm font-semibold text-primary">
-                            {formatPrice(ag.servico.preco_centavos)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
+                ) : selectedCliente.agendamentos?.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
                     Nenhum agendamento encontrado
                   </p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedCliente.agendamentos?.map((ag) => (
+                      <div
+                        key={ag.id}
+                        className="flex items-center justify-between p-3 border border-border rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="text-center">
+                            <p className="text-sm font-medium">
+                              {new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{ag.hora}</p>
+                          </div>
+                          <div>
+                            <p className="font-medium">{ag.servico?.nome || 'Serviço'}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatPrice(ag.servico?.preco_centavos || 0)}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant={statusConfig[ag.status]?.variant || 'secondary'}>
+                          {statusConfig[ag.status]?.label || ag.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
