@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Logo } from "@/components/Logo";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { UserType } from "@/hooks/useAuth";
 
 interface LoginCardProps {
   type: "usuario" | "cabeleireiro" | "administrador";
@@ -30,10 +32,10 @@ export function LoginCard({
   alternativeLogins,
 }: LoginCardProps) {
   const navigate = useNavigate();
+  const { signIn, loading: isLoading, error: authError } = useAuthContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const validateForm = () => {
@@ -60,20 +62,27 @@ export function LoginCard({
 
     if (!validateForm()) return;
 
-    setIsLoading(true);
+    const userTypeMap: Record<string, UserType> = {
+      'usuario': 'cliente',
+      'cabeleireiro': 'salao',
+      'administrador': 'admin'
+    };
 
-    // Simulate authentication (will be replaced with Supabase)
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const result = await signIn(email, password, userTypeMap[type]);
 
-    toast.success("Login realizado com sucesso!", {
-      description: "Redirecionando para o painel...",
-    });
+    if (result.user) {
+      toast.success("Login realizado com sucesso!", {
+        description: "Redirecionando para o painel...",
+      });
 
-    setTimeout(() => {
-      navigate(redirectPath);
-    }, 500);
-
-    setIsLoading(false);
+      setTimeout(() => {
+        navigate(redirectPath);
+      }, 500);
+    } else if (result.error) {
+      toast.error("Erro ao fazer login", {
+        description: result.error,
+      });
+    }
   };
 
   return (

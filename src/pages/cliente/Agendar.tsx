@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ClienteLayout } from "@/components/layouts/ClienteLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Store,
-  User,
   Scissors,
   Calendar,
   Clock,
@@ -18,43 +18,105 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { clienteAPI, type Loja, type Servico } from "@/services/clienteAPI";
 
 const steps = [
   { id: 1, title: "Local", icon: Store },
   { id: 2, title: "Serviço", icon: Scissors },
-  { id: 3, title: "Profissional", icon: User },
-  { id: 4, title: "Data e Hora", icon: Calendar },
-  { id: 5, title: "Confirmar", icon: Check },
+  { id: 3, title: "Data e Hora", icon: Calendar },
+  { id: 4, title: "Confirmar", icon: Check },
 ];
-
-const mockLojas = [
-  { id: "1", nome: "Barbearia Premium", endereco: "Rua das Flores, 123", avaliacao: 4.8, distancia: "1.2 km" },
-  { id: "2", nome: "Studio Hair", endereco: "Av. Principal, 456", avaliacao: 4.5, distancia: "2.5 km" },
-  { id: "3", nome: "Corte & Estilo", endereco: "Praça Central, 78", avaliacao: 4.9, distancia: "3.1 km" },
-];
-
-const mockServicos = [
-  { id: "1", nome: "Corte Masculino", duracao: 30, preco: 4500 },
-  { id: "2", nome: "Barba", duracao: 20, preco: 2500 },
-  { id: "3", nome: "Corte + Barba", duracao: 50, preco: 6000 },
-  { id: "4", nome: "Pigmentação", duracao: 45, preco: 8000 },
-];
-
-const mockProfissionais = [
-  { id: "1", nome: "Carlos Silva", especialidade: "Cortes Clássicos" },
-  { id: "2", nome: "João Santos", especialidade: "Degradê" },
-  { id: "3", nome: "Pedro Lima", especialidade: "Barba" },
-];
-
-const mockHorarios = ["09:00", "09:30", "10:00", "10:30", "11:00", "14:00", "14:30", "15:00", "15:30", "16:00"];
 
 export default function ClienteAgendar() {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedLoja, setSelectedLoja] = useState<string | null>(null);
-  const [selectedServico, setSelectedServico] = useState<string | null>(null);
-  const [selectedProfissional, setSelectedProfissional] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Dados
+  const [lojas, setLojas] = useState<Loja[]>([]);
+  const [servicos, setServicos] = useState<Servico[]>([]);
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
+
+  // Seleções
+  const [selectedLoja, setSelectedLoja] = useState<Loja | null>(null);
+  const [selectedServico, setSelectedServico] = useState<Servico | null>(null);
   const [selectedData, setSelectedData] = useState<string>("");
   const [selectedHora, setSelectedHora] = useState<string | null>(null);
+
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    loadLojas();
+  }, []);
+
+  useEffect(() => {
+    if (selectedLoja) {
+      loadServicos(selectedLoja.id);
+    }
+  }, [selectedLoja]);
+
+  useEffect(() => {
+    if (selectedLoja && selectedServico && selectedData) {
+      loadHorariosDisponiveis();
+    }
+  }, [selectedLoja, selectedServico, selectedData]);
+
+  const loadLojas = async () => {
+    setLoading(true);
+    const { data } = await clienteAPI.getLojas({ search: searchTerm });
+    if (data) {
+      setLojas(data);
+    }
+    setLoading(false);
+  };
+
+  const loadServicos = async (lojaId: string) => {
+    setLoading(true);
+    const { data } = await clienteAPI.getServicosLoja(lojaId);
+    if (data) {
+      setServicos(data);
+    }
+    setLoading(false);
+  };
+
+  const loadHorariosDisponiveis = async () => {
+    if (!selectedLoja || !selectedServico || !selectedData) return;
+
+    setLoading(true);
+    const { data } = await clienteAPI.getHorariosDisponiveis(
+      selectedLoja.id,
+      selectedServico.id,
+      selectedData
+    );
+    if (data) {
+      setHorariosDisponiveis(data);
+    }
+    setLoading(false);
+  };
+
+  const handleConfirm = async () => {
+    if (!selectedLoja || !selectedServico || !selectedData || !selectedHora) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await clienteAPI.createAgendamento({
+      loja_id: selectedLoja.id,
+      servico_id: selectedServico.id,
+      data: selectedData,
+      hora: selectedHora,
+    });
+
+    setLoading(false);
+
+    if (!error && data) {
+      toast.success("Agendamento confirmado com sucesso!");
+      navigate("/cliente/minhas-reservas");
+    }
+  };
 
   const canProceed = () => {
     switch (currentStep) {
@@ -63,8 +125,6 @@ export default function ClienteAgendar() {
       case 2:
         return selectedServico !== null;
       case 3:
-        return selectedProfissional !== null;
-      case 4:
         return selectedData !== "" && selectedHora !== null;
       default:
         return true;
@@ -77,6 +137,11 @@ export default function ClienteAgendar() {
       currency: "BRL",
     }).format(cents / 100);
   };
+
+  const filteredLojas = lojas.filter((loja) =>
+    loja.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    loja.cidade?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <ClienteLayout
@@ -100,7 +165,7 @@ export default function ClienteAgendar() {
                   currentStep === step.id
                     ? "border-primary bg-primary text-primary-foreground"
                     : currentStep > step.id
-                    ? "border-primary bg-primary-light text-primary"
+                    ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-background text-muted-foreground"
                 )}
               >
@@ -144,132 +209,143 @@ export default function ClienteAgendar() {
             <div className="relative mb-6">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar salão por nome ou endereço..."
+                placeholder="Buscar salão por nome ou cidade..."
                 className="pl-10"
-                inputSize="lg"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onBlur={() => loadLojas()}
               />
             </div>
 
-            <div className="space-y-3">
-              {mockLojas.map((loja) => (
-                <Card
-                  key={loja.id}
-                  variant={selectedLoja === loja.id ? "outlined" : "interactive"}
-                  className={cn(
-                    "cursor-pointer transition-all",
-                    selectedLoja === loja.id && "border-primary ring-2 ring-primary/20"
-                  )}
-                  onClick={() => setSelectedLoja(loja.id)}
-                >
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-xl bg-primary-light flex items-center justify-center shrink-0">
-                      <Store className="h-7 w-7 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-foreground truncate">{loja.nome}</h3>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {loja.endereco}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-sm flex items-center gap-1">
-                          <Star className="h-3 w-3 fill-warning text-warning" />
-                          {loja.avaliacao}
-                        </span>
-                        <span className="text-sm text-muted-foreground">{loja.distancia}</span>
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <Skeleton className="h-14 w-14 rounded-xl" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-5 w-1/2" />
+                        <Skeleton className="h-4 w-2/3" />
                       </div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : filteredLojas.length === 0 ? (
+              <div className="text-center py-12">
+                <Store className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Nenhum salão encontrado</h3>
+                <p className="text-sm text-muted-foreground">
+                  Tente ajustar sua busca ou verifique sua localização
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredLojas.map((loja) => (
+                  <Card
+                    key={loja.id}
+                    variant={selectedLoja?.id === loja.id ? "outlined" : "interactive"}
+                    className={cn(
+                      "cursor-pointer transition-all",
+                      selectedLoja?.id === loja.id && "border-primary ring-2 ring-primary/20"
+                    )}
+                    onClick={() => setSelectedLoja(loja)}
+                  >
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <Store className="h-7 w-7 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-foreground truncate">{loja.nome}</h3>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {loja.cidade}, {loja.uf}
+                        </p>
+                        {loja.rating && (
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-sm flex items-center gap-1">
+                              <Star className="h-3 w-3 fill-orange-400 text-orange-400" />
+                              {loja.rating.toFixed(1)}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {loja.total_avaliacoes} avaliações
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Step 2: Selecionar Serviço */}
         {currentStep === 2 && (
           <div className="space-y-3 animate-fade-in">
-            {mockServicos.map((servico) => (
-              <Card
-                key={servico.id}
-                variant={selectedServico === servico.id ? "outlined" : "interactive"}
-                className={cn(
-                  "cursor-pointer transition-all",
-                  selectedServico === servico.id && "border-primary ring-2 ring-primary/20"
-                )}
-                onClick={() => setSelectedServico(servico.id)}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-secondary-light flex items-center justify-center">
-                      <Scissors className="h-6 w-6 text-secondary" />
+            {loading ? (
+              <>
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <Skeleton className="h-12 w-12 rounded-xl" />
+                        <div className="space-y-2">
+                          <Skeleton className="h-5 w-32" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-6 w-16" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </>
+            ) : servicos.length === 0 ? (
+              <div className="text-center py-12">
+                <Scissors className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Nenhum serviço disponível</h3>
+                <p className="text-sm text-muted-foreground">
+                  Este salão ainda não cadastrou serviços
+                </p>
+              </div>
+            ) : (
+              servicos.map((servico) => (
+                <Card
+                  key={servico.id}
+                  variant={selectedServico?.id === servico.id ? "outlined" : "interactive"}
+                  className={cn(
+                    "cursor-pointer transition-all",
+                    selectedServico?.id === servico.id && "border-primary ring-2 ring-primary/20"
+                  )}
+                  onClick={() => setSelectedServico(servico)}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+                        <Scissors className="h-6 w-6 text-secondary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">{servico.nome}</h3>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {servico.duracao_minutos} min
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">{servico.nome}</h3>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {servico.duracao} min
-                      </p>
-                    </div>
-                  </div>
-                  <span className="font-semibold text-primary">{formatPrice(servico.preco)}</span>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {/* Step 3: Selecionar Profissional */}
-        {currentStep === 3 && (
-          <div className="space-y-3 animate-fade-in">
-            <Card
-              variant={selectedProfissional === "any" ? "outlined" : "interactive"}
-              className={cn(
-                "cursor-pointer transition-all",
-                selectedProfissional === "any" && "border-primary ring-2 ring-primary/20"
-              )}
-              onClick={() => setSelectedProfissional("any")}
-            >
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                  <User className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Sem preferência</h3>
-                  <p className="text-sm text-muted-foreground">Qualquer profissional disponível</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {mockProfissionais.map((profissional) => (
-              <Card
-                key={profissional.id}
-                variant={selectedProfissional === profissional.id ? "outlined" : "interactive"}
-                className={cn(
-                  "cursor-pointer transition-all",
-                  selectedProfissional === profissional.id && "border-primary ring-2 ring-primary/20"
-                )}
-                onClick={() => setSelectedProfissional(profissional.id)}
-              >
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary-light flex items-center justify-center">
-                    <span className="text-primary font-semibold">
-                      {profissional.nome.split(" ").map((n) => n[0]).join("")}
+                    <span className="font-semibold text-primary">
+                      {formatPrice(servico.preco_centavos || 0)}
                     </span>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">{profissional.nome}</h3>
-                    <p className="text-sm text-muted-foreground">{profissional.especialidade}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         )}
 
-        {/* Step 4: Selecionar Data e Hora */}
-        {currentStep === 4 && (
+        {/* Step 3: Selecionar Data e Hora */}
+        {currentStep === 3 && (
           <div className="space-y-6 animate-fade-in">
             <div>
               <Label htmlFor="data" className="text-base font-medium mb-2 block">
@@ -279,8 +355,10 @@ export default function ClienteAgendar() {
                 id="data"
                 type="date"
                 value={selectedData}
-                onChange={(e) => setSelectedData(e.target.value)}
-                inputSize="lg"
+                onChange={(e) => {
+                  setSelectedData(e.target.value);
+                  setSelectedHora(null);
+                }}
                 min={new Date().toISOString().split("T")[0]}
               />
             </div>
@@ -290,26 +368,40 @@ export default function ClienteAgendar() {
                 <Label className="text-base font-medium mb-3 block">
                   Horários disponíveis
                 </Label>
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                  {mockHorarios.map((hora) => (
-                    <Button
-                      key={hora}
-                      variant={selectedHora === hora ? "default" : "outline"}
-                      size="lg"
-                      className="w-full"
-                      onClick={() => setSelectedHora(hora)}
-                    >
-                      {hora}
-                    </Button>
-                  ))}
-                </div>
+                {loading ? (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : horariosDisponiveis.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum horário disponível para esta data
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                    {horariosDisponiveis.map((hora) => (
+                      <Button
+                        key={hora}
+                        variant={selectedHora === hora ? "default" : "outline"}
+                        className="w-full"
+                        onClick={() => setSelectedHora(hora)}
+                      >
+                        {hora}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* Step 5: Confirmar */}
-        {currentStep === 5 && (
+        {/* Step 4: Confirmar */}
+        {currentStep === 4 && (
           <div className="animate-fade-in">
             <Card variant="elevated">
               <CardHeader>
@@ -318,23 +410,21 @@ export default function ClienteAgendar() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center py-3 border-b border-border">
                   <span className="text-muted-foreground">Local</span>
-                  <span className="font-medium">
-                    {mockLojas.find((l) => l.id === selectedLoja)?.nome}
+                  <span className="font-medium">{selectedLoja?.nome}</span>
+                </div>
+                <div className="flex justify-between items-center py-3 border-b border-border">
+                  <span className="text-muted-foreground">Endereço</span>
+                  <span className="font-medium text-right text-sm">
+                    {selectedLoja?.endereco}, {selectedLoja?.cidade}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-3 border-b border-border">
                   <span className="text-muted-foreground">Serviço</span>
-                  <span className="font-medium">
-                    {mockServicos.find((s) => s.id === selectedServico)?.nome}
-                  </span>
+                  <span className="font-medium">{selectedServico?.nome}</span>
                 </div>
                 <div className="flex justify-between items-center py-3 border-b border-border">
-                  <span className="text-muted-foreground">Profissional</span>
-                  <span className="font-medium">
-                    {selectedProfissional === "any"
-                      ? "Sem preferência"
-                      : mockProfissionais.find((p) => p.id === selectedProfissional)?.nome}
-                  </span>
+                  <span className="text-muted-foreground">Duração</span>
+                  <span className="font-medium">{selectedServico?.duracao_minutos} minutos</span>
                 </div>
                 <div className="flex justify-between items-center py-3 border-b border-border">
                   <span className="text-muted-foreground">Data</span>
@@ -349,7 +439,7 @@ export default function ClienteAgendar() {
                 <div className="flex justify-between items-center py-3">
                   <span className="text-muted-foreground">Valor</span>
                   <span className="text-xl font-bold text-primary">
-                    {formatPrice(mockServicos.find((s) => s.id === selectedServico)?.preco || 0)}
+                    {formatPrice(selectedServico?.preco_centavos || 0)}
                   </span>
                 </div>
               </CardContent>
@@ -365,25 +455,25 @@ export default function ClienteAgendar() {
               size="lg"
               className="flex-1"
               onClick={() => setCurrentStep(currentStep - 1)}
+              disabled={loading}
             >
               Voltar
             </Button>
           )}
           <Button
-            variant="gradient"
             size="lg"
-            className="flex-1"
-            disabled={!canProceed()}
+            className="flex-1 gap-2"
+            disabled={!canProceed() || loading}
             onClick={() => {
-              if (currentStep < 5) {
+              if (currentStep < 4) {
                 setCurrentStep(currentStep + 1);
               } else {
-                // Handle confirmation
+                handleConfirm();
               }
             }}
           >
-            {currentStep === 5 ? "Confirmar Agendamento" : "Continuar"}
-            <ChevronRight className="h-4 w-4" />
+            {loading ? "Processando..." : currentStep === 4 ? "Confirmar Agendamento" : "Continuar"}
+            {!loading && <ChevronRight className="h-4 w-4" />}
           </Button>
         </div>
       </div>

@@ -1,8 +1,24 @@
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { LojaLayout } from "@/components/layouts/LojaLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Calendar,
   ChevronLeft,
@@ -11,38 +27,135 @@ import {
   Users,
   CheckCircle,
   AlertCircle,
-  Plus,
-  HelpCircle,
+  XCircle,
+  Phone,
+  Mail,
+  Scissors,
+  Timer,
+  DollarSign,
 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-const mockAgendamentos = [
-  { id: "1", cliente: "João Silva", servico: "Corte", hora: "09:00", profissional: "Carlos", status: "confirmado" },
-  { id: "2", cliente: "Pedro Santos", servico: "Barba", hora: "09:30", profissional: "Carlos", status: "pendente" },
-  { id: "3", cliente: "Lucas Lima", servico: "Corte + Barba", hora: "10:00", profissional: "João", status: "confirmado" },
-  { id: "4", cliente: "Marcos Oliveira", servico: "Corte", hora: "10:30", profissional: "Pedro", status: "confirmado" },
-  { id: "5", cliente: "Rafael Costa", servico: "Pigmentação", hora: "11:00", profissional: "Carlos", status: "pendente" },
-  { id: "6", cliente: "Bruno Alves", servico: "Corte", hora: "14:00", profissional: "João", status: "confirmado" },
-];
+interface Agendamento {
+  id: string;
+  loja_id: string;
+  user_id: string;
+  servico_id: string;
+  data: string;
+  hora: string;
+  status: "pendente" | "confirmado" | "cancelado" | "concluido" | "nao_compareceu";
+  observacoes: string | null;
+  criado_em: string;
+  servico?: {
+    nome: string;
+    preco_centavos: number;
+    duracao_minutos: number;
+  };
+  usuario?: {
+    nome: string;
+    email: string;
+    telefone: string;
+  };
+}
 
-const profissionais = ["Carlos", "João", "Pedro"];
-
-const kpis = [
-  { label: "Agendados Hoje", value: "12", icon: Calendar, color: "primary" },
-  { label: "Confirmados", value: "8", icon: CheckCircle, color: "success" },
-  { label: "Pendentes", value: "4", icon: AlertCircle, color: "warning" },
-  { label: "Clientes Atendidos", value: "156", icon: Users, color: "secondary" },
-];
+const statusConfig = {
+  pendente: { label: "Pendente", icon: AlertCircle, variant: "warning" as const, color: "text-orange-600" },
+  confirmado: { label: "Confirmado", icon: CheckCircle, variant: "success" as const, color: "text-green-600" },
+  cancelado: { label: "Cancelado", icon: XCircle, variant: "secondary" as const, color: "text-gray-600" },
+  concluido: { label: "Concluído", icon: CheckCircle, variant: "default" as const, color: "text-blue-600" },
+  nao_compareceu: { label: "Não Compareceu", icon: XCircle, variant: "destructive" as const, color: "text-red-600" },
+};
 
 export default function LojaAgenda() {
+  const [loading, setLoading] = useState(true);
+  const [lojaId, setLojaId] = useState<string | null>(null);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [statusFilter, setStatusFilter] = useState<string>("todos");
+
+  // Dialog states
+  const [detailsDialog, setDetailsDialog] = useState(false);
+  const [selectedAgendamento, setSelectedAgendamento] = useState<Agendamento | null>(null);
+
+  useEffect(() => {
+    loadLojaId();
+  }, []);
+
+  useEffect(() => {
+    if (lojaId) {
+      loadAgendamentos();
+    }
+  }, [lojaId, selectedDate, statusFilter]);
+
+  const loadLojaId = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('lojas')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (data) {
+      setLojaId(data.id);
+    }
+  };
+
+  const loadAgendamentos = async () => {
+    if (!lojaId) return;
+
+    setLoading(true);
+    const dataStr = selectedDate.toISOString().split('T')[0];
+
+    let query = supabase
+      .from('agendamentos')
+      .select(`
+        *,
+        servico:servicos!inner(nome, preco_centavos, duracao_minutos),
+        usuario:usuarios!inner(nome, email, telefone)
+      `)
+      .eq('loja_id', lojaId)
+      .eq('data', dataStr)
+      .order('hora', { ascending: true });
+
+    if (statusFilter !== "todos") {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error } = await query;
+
+    if (!error && data) {
+      setAgendamentos(data as any);
+    }
+    setLoading(false);
+  };
+
+  const handleUpdateStatus = async (agendamentoId: string, novoStatus: string) => {
+    if (!lojaId) return;
+
+    const { error } = await supabase
+      .from('agendamentos')
+      .update({ status: novoStatus })
+      .eq('id', agendamentoId);
+
+    if (!error) {
+      toast.success('Status atualizado com sucesso!');
+      await loadAgendamentos();
+      setDetailsDialog(false);
+    } else {
+      toast.error('Erro ao atualizar status');
+    }
+  };
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("pt-BR", {
       weekday: "long",
       day: "numeric",
       month: "long",
+      year: "numeric",
     });
   };
 
@@ -50,6 +163,37 @@ export default function LojaAgenda() {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + days);
     setSelectedDate(newDate);
+  };
+
+  const formatPrice = (cents: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(cents / 100);
+  };
+
+  const goToToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  // Calcular estatísticas
+  const stats = {
+    total: agendamentos.length,
+    confirmados: agendamentos.filter(a => a.status === "confirmado").length,
+    pendentes: agendamentos.filter(a => a.status === "pendente").length,
+    concluidos: agendamentos.filter(a => a.status === "concluido").length,
+  };
+
+  const kpis = [
+    { label: "Total do Dia", value: stats.total.toString(), icon: Calendar, color: "primary" },
+    { label: "Confirmados", value: stats.confirmados.toString(), icon: CheckCircle, color: "success" },
+    { label: "Pendentes", value: stats.pendentes.toString(), icon: AlertCircle, color: "warning" },
+    { label: "Concluídos", value: stats.concluidos.toString(), icon: Users, color: "secondary" },
+  ];
+
+  const handleShowDetails = (agendamento: Agendamento) => {
+    setSelectedAgendamento(agendamento);
+    setDetailsDialog(true);
   };
 
   return (
@@ -71,9 +215,9 @@ export default function LojaAgenda() {
                   className={cn(
                     "h-10 w-10 rounded-xl flex items-center justify-center",
                     kpi.color === "primary" && "bg-primary-light text-primary",
-                    kpi.color === "success" && "bg-success-light text-success",
-                    kpi.color === "warning" && "bg-warning-light text-warning",
-                    kpi.color === "secondary" && "bg-secondary-light text-secondary"
+                    kpi.color === "success" && "bg-green-100 text-green-600",
+                    kpi.color === "warning" && "bg-orange-100 text-orange-600",
+                    kpi.color === "secondary" && "bg-blue-100 text-blue-600"
                   )}
                 >
                   <kpi.icon className="h-5 w-5" />
@@ -87,16 +231,19 @@ export default function LojaAgenda() {
       {/* Date Navigation */}
       <Card variant="elevated" className="mb-6">
         <CardContent className="p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <Button variant="outline" size="icon" onClick={() => changeDate(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="text-center">
+            <div className="text-center flex-1">
               <p className="font-semibold text-lg capitalize">{formatDate(selectedDate)}</p>
               <p className="text-sm text-muted-foreground">
-                {mockAgendamentos.length} agendamentos
+                {agendamentos.length} {agendamentos.length === 1 ? 'agendamento' : 'agendamentos'}
               </p>
             </div>
+            <Button variant="outline" size="sm" onClick={goToToday} className="hidden sm:flex">
+              Hoje
+            </Button>
             <Button variant="outline" size="icon" onClick={() => changeDate(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -104,108 +251,274 @@ export default function LojaAgenda() {
         </CardContent>
       </Card>
 
-      {/* Agenda Grid */}
+      {/* Filtros */}
+      <div className="flex gap-3 mb-6">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="pendente">Pendente</SelectItem>
+            <SelectItem value="confirmado">Confirmado</SelectItem>
+            <SelectItem value="concluido">Concluído</SelectItem>
+            <SelectItem value="cancelado">Cancelado</SelectItem>
+            <SelectItem value="nao_compareceu">Não Compareceu</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Lista de Agendamentos */}
       <Card variant="elevated">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle>Agendamentos</CardTitle>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Arraste para remarcar um agendamento</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <Button variant="gradient" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Agendamento
-          </Button>
+        <CardHeader>
+          <CardTitle>Agendamentos do Dia</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Desktop: Grid by professional */}
-          <div className="hidden lg:block overflow-x-auto">
-            <div className="min-w-[600px]">
-              {/* Header */}
-              <div className="grid grid-cols-4 gap-4 mb-4 pb-4 border-b border-border">
-                <div className="font-medium text-muted-foreground">Horário</div>
-                {profissionais.map((prof) => (
-                  <div key={prof} className="font-medium text-center">{prof}</div>
-                ))}
-              </div>
-
-              {/* Time slots */}
-              {["09:00", "09:30", "10:00", "10:30", "11:00", "14:00", "14:30", "15:00"].map((hora) => (
-                <div key={hora} className="grid grid-cols-4 gap-4 py-2 border-b border-border/50 last:border-0">
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Clock className="h-4 w-4 mr-2" />
-                    {hora}
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-4 p-4 border border-border rounded-lg">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-5 w-1/3" />
+                    <Skeleton className="h-4 w-1/2" />
                   </div>
-                  {profissionais.map((prof) => {
-                    const agendamento = mockAgendamentos.find(
-                      (a) => a.hora === hora && a.profissional === prof
-                    );
-                    return (
-                      <div key={prof} className="min-h-[60px]">
-                        {agendamento ? (
-                          <div
-                            className={cn(
-                              "p-3 rounded-lg cursor-pointer transition-all hover:shadow-md",
-                              agendamento.status === "confirmado"
-                                ? "bg-success-light border border-success/20"
-                                : "bg-warning-light border border-warning/20"
-                            )}
-                          >
-                            <p className="font-medium text-sm truncate">{agendamento.cliente}</p>
-                            <p className="text-xs text-muted-foreground">{agendamento.servico}</p>
-                          </div>
-                        ) : (
-                          <div className="h-full min-h-[60px] border-2 border-dashed border-border rounded-lg flex items-center justify-center text-muted-foreground text-xs hover:border-primary/50 hover:bg-primary-light/30 transition-colors cursor-pointer">
-                            Disponível
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <Skeleton className="h-6 w-24" />
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Mobile: List view */}
-          <div className="lg:hidden space-y-3">
-            {mockAgendamentos.map((agendamento) => (
-              <div
-                key={agendamento.id}
-                className={cn(
-                  "p-4 rounded-lg border",
-                  agendamento.status === "confirmado"
-                    ? "bg-success-light/50 border-success/20"
-                    : "bg-warning-light/50 border-warning/20"
-                )}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold">{agendamento.cliente}</span>
-                  <Badge
-                    variant={agendamento.status === "confirmado" ? "success" : "warning"}
-                  >
-                    {agendamento.status === "confirmado" ? "Confirmado" : "Pendente"}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    {agendamento.hora}
-                  </span>
-                  <span>{agendamento.servico}</span>
-                  <span>• {agendamento.profissional}</span>
-                </div>
+          ) : agendamentos.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                <Calendar className="h-8 w-8 text-muted-foreground" />
               </div>
-            ))}
-          </div>
+              <p className="text-muted-foreground mb-2">Nenhum agendamento para este dia.</p>
+              <p className="text-sm text-muted-foreground">
+                {statusFilter !== "todos"
+                  ? "Tente alterar o filtro de status."
+                  : "Os agendamentos aparecerão aqui quando forem criados."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {agendamentos.map((agendamento) => {
+                const status = statusConfig[agendamento.status];
+                const StatusIcon = status.icon;
+
+                return (
+                  <div
+                    key={agendamento.id}
+                    onClick={() => handleShowDetails(agendamento)}
+                    className="p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/30 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-4 flex-1">
+                        {/* Horário */}
+                        <div className="flex flex-col items-center justify-center bg-primary-light rounded-lg p-3 min-w-[70px]">
+                          <Clock className="h-4 w-4 text-primary mb-1" />
+                          <span className="text-lg font-bold text-primary">{agendamento.hora}</span>
+                        </div>
+
+                        {/* Informações */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div>
+                              <h4 className="font-semibold text-base truncate">
+                                {agendamento.usuario?.nome || 'Cliente'}
+                              </h4>
+                              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                <Scissors className="h-3.5 w-3.5" />
+                                {agendamento.servico?.nome || 'Serviço'}
+                              </p>
+                            </div>
+                            <Badge variant={status.variant} className="shrink-0 gap-1">
+                              <StatusIcon className="h-3 w-3" />
+                              {status.label}
+                            </Badge>
+                          </div>
+
+                          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Timer className="h-3.5 w-3.5" />
+                              {agendamento.servico?.duracao_minutos || 0} min
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <DollarSign className="h-3.5 w-3.5" />
+                              {formatPrice(agendamento.servico?.preco_centavos || 0)}
+                            </span>
+                            {agendamento.usuario?.telefone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="h-3.5 w-3.5" />
+                                {agendamento.usuario.telefone}
+                              </span>
+                            )}
+                          </div>
+
+                          {agendamento.observacoes && (
+                            <div className="mt-2 p-2 bg-muted/50 rounded text-sm text-muted-foreground">
+                              <strong>Obs:</strong> {agendamento.observacoes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Dialog de Detalhes */}
+      <Dialog open={detailsDialog} onOpenChange={setDetailsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Agendamento</DialogTitle>
+            <DialogDescription>
+              Visualize e gerencie o status do agendamento
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAgendamento && (
+            <div className="space-y-4 py-4">
+              {/* Cliente */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Cliente</h4>
+                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                  <div className="h-10 w-10 rounded-full bg-primary-light flex items-center justify-center">
+                    <span className="text-sm font-semibold text-primary">
+                      {selectedAgendamento.usuario?.nome?.substring(0, 2).toUpperCase() || 'CL'}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{selectedAgendamento.usuario?.nome || 'Cliente'}</p>
+                    {selectedAgendamento.usuario?.email && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                        <Mail className="h-3 w-3" />
+                        {selectedAgendamento.usuario.email}
+                      </p>
+                    )}
+                    {selectedAgendamento.usuario?.telefone && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {selectedAgendamento.usuario.telefone}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Serviço */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Serviço</h4>
+                <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                  <p className="font-medium">{selectedAgendamento.servico?.nome || 'Serviço'}</p>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Timer className="h-3.5 w-3.5" />
+                      {selectedAgendamento.servico?.duracao_minutos || 0} minutos
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <DollarSign className="h-3.5 w-3.5" />
+                      {formatPrice(selectedAgendamento.servico?.preco_centavos || 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Horário */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Data e Horário</h4>
+                <div className="p-3 bg-muted/50 rounded-lg flex items-center gap-4">
+                  <span className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    {new Date(selectedAgendamento.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    {selectedAgendamento.hora}
+                  </span>
+                </div>
+              </div>
+
+              {/* Observações */}
+              {selectedAgendamento.observacoes && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Observações</h4>
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                    {selectedAgendamento.observacoes}
+                  </div>
+                </div>
+              )}
+
+              {/* Status Atual */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Status Atual</h4>
+                <Badge variant={statusConfig[selectedAgendamento.status].variant} className="gap-1">
+                  {React.createElement(statusConfig[selectedAgendamento.status].icon, { className: "h-3 w-3" })}
+                  {statusConfig[selectedAgendamento.status].label}
+                </Badge>
+              </div>
+
+              {/* Alterar Status */}
+              {selectedAgendamento.status !== "cancelado" && selectedAgendamento.status !== "concluido" && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Alterar Status</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAgendamento.status !== "confirmado" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "confirmado")}
+                        className="gap-2"
+                      >
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        Confirmar
+                      </Button>
+                    )}
+                    {selectedAgendamento.status === "confirmado" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleUpdateStatus(selectedAgendamento.id, "concluido")}
+                        className="gap-2"
+                      >
+                        <CheckCircle className="h-4 w-4 text-blue-600" />
+                        Concluir
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleUpdateStatus(selectedAgendamento.id, "nao_compareceu")}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4 text-red-600" />
+                      Não Compareceu
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleUpdateStatus(selectedAgendamento.id, "cancelado")}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4 text-gray-600" />
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsDialog(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </LojaLayout>
   );
 }

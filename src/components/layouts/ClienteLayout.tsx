@@ -1,9 +1,11 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Calendar, Clock, User, Menu, X, LogOut, Plus } from "lucide-react";
+import { Calendar, Clock, User, Menu, X, LogOut, Plus, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
 interface ClienteLayoutProps {
   children: ReactNode;
@@ -20,6 +22,22 @@ const navItems = [
 export function ClienteLayout({ children, title, description }: ClienteLayoutProps) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+
+  const handleLogout = () => {
+    // Mostrar notificação de logout
+    toast.success('Logout realizado com sucesso!');
+    
+    // Aguardar um momento para mostrar a notificação antes de redirecionar
+    setTimeout(() => {
+      // Limpar qualquer dado de sessão do localStorage/sessionStorage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Redirecionar para a página inicial (login)
+      window.location.href = '/';
+    }, 1000);
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -48,7 +66,15 @@ export function ClienteLayout({ children, title, description }: ClienteLayoutPro
             </nav>
 
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon-sm" className="hidden md:flex">
+              <Button 
+                variant="ghost" 
+                size="icon-sm" 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="hidden md:flex"
+              >
+                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <Button variant="ghost" size="icon-sm" className="hidden md:flex" onClick={handleLogout}>
                 <LogOut className="h-4 w-4" />
               </Button>
 
@@ -85,7 +111,15 @@ export function ClienteLayout({ children, title, description }: ClienteLayoutPro
                 </Link>
               ))}
               <div className="border-t border-border mt-2 pt-2">
-                <Button variant="ghost" className="w-full justify-start gap-2 text-destructive">
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start gap-2"
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  Alternar Tema
+                </Button>
+                <Button variant="ghost" className="w-full justify-start gap-2 text-destructive" onClick={handleLogout}>
                   <LogOut className="h-4 w-4" />
                   Sair
                 </Button>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { ClienteLayout } from "@/components/layouts/ClienteLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ import {
 import { toast } from "sonner";
 
 export default function ClientePerfil() {
+  const { theme, setTheme } = useTheme();
+  
   const [profile, setProfile] = useState({
     nome: "João da Silva",
     sobrenome: "Oliveira",
@@ -33,7 +36,7 @@ export default function ClientePerfil() {
     notificacoes: true,
     lembretes: true,
     promocoes: false,
-    modoEscuro: false,
+    modoEscuro: theme === 'dark',
     altoContraste: false,
     fonteMaior: false,
   });
@@ -226,9 +229,10 @@ export default function ClientePerfil() {
               </div>
               <Switch
                 checked={preferences.modoEscuro}
-                onCheckedChange={(checked) =>
-                  setPreferences({ ...preferences, modoEscuro: checked })
-                }
+                onCheckedChange={(checked) => {
+                  setPreferences({ ...preferences, modoEscuro: checked });
+                  setTheme(checked ? 'dark' : 'light');
+                }}
               />
             </div>
 

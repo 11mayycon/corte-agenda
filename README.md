@@ -1,73 +1,220 @@
-# Welcome to your Lovable project
+# 🏪 Corte Agenda - Sistema de Agendamento para Salões
 
-## Project info
+Sistema completo de agendamento para salões de beleza, barbearias e estabelecimentos de cortes, desenvolvido com React, TypeScript e tecnologias modernas.
 
-**URL**: https://lovable.dev/projects/a1fe44f0-51ba-4ec7-a776-bd565df89b00
+## 📋 Funcionalidades
 
-## How can I edit this code?
+### 🎨 Temas
+- **Modo Claro/Escuro**: Interface com suporte completo a temas
+- **Alternância rápida**: Botão de tema na barra de navegação
+- **Persistência**: Tema salvo no localStorage
+- **Sistema de cores**: Paleta de cores profissional com gradientes
 
-There are several ways of editing your application.
+### 🔐 Sistema de Login
+- **Login de Usuário**: `/login/usuario` - Rota principal (página inicial)
+- **Login de Cabeleireiro**: `/login/cabeleireiro`
+- **Login de Administrador**: `/login/administrador`
+- **Logout funcional**: Com notificação e limpeza de sessão
 
-**Use Lovable**
+### 👤 Área do Cliente
+- **Agendar Serviço**: `/cliente/agendar`
+  - Visualização de serviços disponíveis
+  - Seleção de profissional
+  - Escolha de data e horário
+  - Confirmação de agendamento
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/a1fe44f0-51ba-4ec7-a776-bd565df89b00) and start prompting.
+- **Minhas Reservas**: `/cliente/minhas-reservas`
+  - Lista de agendamentos ativos
+  - Histórico de serviços
+  - Cancelamento de agendamentos
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Meu Perfil**: `/cliente/perfil`
+  - Edição de dados pessoais
+  - Preferências de notificação
+  - **Modo Escuro**: Ativar/desativar tema escuro
+  - **Lembretes**: Notificações 24h antes
+  - **Promoções**: Receber ofertas especiais
+  - **Acessibilidade**: Alto contraste, fonte maior
 
-**Use your preferred IDE**
+### 🏪 Área da Loja
+- **Agenda**: `/loja/agenda`
+  - Visualização diária/semanal dos agendamentos
+  - Status dos agendamentos (confirmado/pendente)
+  - Gerenciamento de horários disponíveis
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **Serviços**: `/loja/servicos`
+  - Cadastro de serviços oferecidos
+  - Definição de preços e duração
+  - Categorias de serviços
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- **Profissionais**: `/loja/profissionais`
+  - Gerenciamento de funcionários
+  - Horários de trabalho por profissional
+  - Ativar/desativar profissionais
 
-Follow these steps:
+- **Horários**: `/loja/horarios`
+  - Configuração de horário de funcionamento
+  - Duração padrão dos serviços
+  - Horários por dia da semana
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+- **Clientes**: `/loja/clientes`
+  - Cadastro e gerenciamento de clientes
+  - Histórico de atendimentos
+  - Informações de contato
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+- **WhatsApp**: `/loja/whatsapp`
+  - Integração com WhatsApp Business
+  - Envio de lembretes automáticos
+  - Confirmações de agendamento
 
-# Step 3: Install the necessary dependencies.
-npm i
+### 👨‍💼 Área Administrativa
+- **Visão Geral**: `/admin/visao-geral`
+  - Dashboard com métricas gerais
+  - Gráficos de desempenho
+  - Estatísticas de uso
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+- **Lojas**: `/admin/lojas`
+  - Gerenciamento de múltiplas unidades
+  - Planos e assinaturas
+  - Status das lojas (ativa/pendente)
+
+- **Usuários**: `/admin/usuarios`
+  - Controle de acessos e permissões
+  - Gerenciamento de administradores
+  - Auditoria de usuários
+
+- **Auditoria**: `/admin/auditoria`
+  - Logs de atividades do sistema
+  - Histórico de ações por usuário
+  - Filtros por tipo de ação
+
+- **Configurações**: `/admin/configuracoes`
+  - **Segurança**: 2FA, timeout de sessão, whitelist de IPs
+  - **Sistema**: Modo de manutenção, debug mode, backup automático
+  - **Email**: Configurações de SMTP e notificações
+
+### 🎯 Botões e Funcionalidades
+
+#### Botões Funcionais
+- ✅ **Login**: Sistema completo de autenticação
+- ✅ **Logout**: Com notificação e redirecionamento
+- ✅ **Agendar**: Sistema de agendamento completo
+- ✅ **Alternar Tema**: Modo claro/escuro instantâneo
+- ✅ **Salvar Perfil**: Atualização de dados do usuário
+- ✅ **Cancelar Agendamento**: Com confirmação
+
+#### Botões Sem Função (Placeholders)
+- ⚠️ **Resetar Acesso**: Em administração de lojas
+- ⚠️ **Desativar Loja**: Em administração de lojas
+- ⚠️ **Ver Detalhes**: Em várias telas de listagem
+- ⚠️ **Editar Serviço**: Em gerenciamento de serviços
+- ⚠️ **Adicionar Novo**: Em formulários de cadastro
+- ⚠️ **Exportar Dados**: Em relatórios e listagens
+- ⚠️ **Imprimir**: Em comprovantes e relatórios
+
+### 🎨 Design e Interface
+- **Design Moderno**: Interface limpa e profissional
+- **Responsivo**: Adaptável a todos os dispositivos
+- **Animações**: Transições suaves e feedback visual
+- **Componentes shadcn/ui**: Biblioteca de componentes modernos
+- **Ícones Lucide**: Ícones consistentes e bonitos
+
+### 📱 Responsividade
+- **Desktop**: Layout completo com sidebar
+- **Tablet**: Adaptação intermediária
+- **Mobile**: Menu hambúrguer e navegação otimizada
+- **Touch-friendly**: Botões e elementos adaptados para toque
+
+## 🚀 Tecnologias Utilizadas
+
+### Frontend
+- **Vite**: Build tool rápido e moderno
+- **React 18**: Biblioteca de UI com hooks e context
+- **TypeScript**: Type safety e melhor desenvolvimento
+- **Tailwind CSS**: Framework de CSS utilitário
+- **shadcn/ui**: Componentes React modernos e acessíveis
+- **Lucide React**: Ícones SVG otimizados
+
+### Estado e Dados
+- **TanStack Query**: Gerenciamento de estado servidor
+- **React Hook Form**: Formulários performáticos
+- **Zod**: Validação de esquemas
+- **date-fns**: Manipulação de datas
+
+### Integrações
+- **Supabase**: Backend como serviço (configurado)
+- **React Router**: Roteamento client-side
+- **Sonner**: Notificações toast
+- **next-themes**: Sistema de temas
+
+## 📁 Estrutura do Projeto
+
+```
+src/
+├── components/          # Componentes reutilizáveis
+│   ├── ui/             # Componentes shadcn/ui
+│   ├── layouts/        # Layouts por tipo de usuário
+│   └── auth/           # Componentes de autenticação
+├── pages/              # Páginas da aplicação
+│   ├── admin/          # Área administrativa
+│   ├── cliente/        # Área do cliente
+│   ├── loja/           # Área da loja
+│   └── login/          # Telas de login
+├── hooks/              # Hooks customizados
+├── lib/                # Utilitários e configurações
+└── integrations/       # Integrações externas
+```
+
+## 🎯 Como Executar
+
+### Pré-requisitos
+- Node.js 18+ 
+- npm ou yarn
+
+### Instalação
+```bash
+# Clone o repositório
+git clone https://github.com/11mayycon/corte-agenda.git
+
+# Entre no diretório
+cd corte-agenda
+
+# Instale as dependências
+npm install
+
+# Execute o servidor de desenvolvimento
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Build para Produção
+```bash
+# Build otimizado
+npm run build
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+# Preview do build
+npm run preview
+```
 
-**Use GitHub Codespaces**
+## 🔧 Configurações Adicionais
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Variáveis de Ambiente
+O projeto possui arquivo `.env` configurado com:
+- Configurações do Supabase
+- URLs de API
+- Configurações de tema
 
-## What technologies are used for this project?
+### Customização de Temas
+- Cores principais: `--primary` (roxo) e `--secondary` (azul)
+- Sistema de gradientes pré-configurado
+- Suporte a modo escuro completo
+- Variáveis CSS customizáveis
 
-This project is built with:
+## 📞 Suporte
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Este projeto foi desenvolvido com [Lovable](https://lovable.dev/) e está disponível para contribuição.
 
-## How can I deploy this project?
+**URL do Projeto**: https://lovable.dev/projects/a1fe44f0-51ba-4ec7-a776-bd565df89b00
 
-Simply open [Lovable](https://lovable.dev/projects/a1fe44f0-51ba-4ec7-a776-bd565df89b00) and click on Share -> Publish.
+---
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+⭐ Se este projeto foi útil, considere dar uma estrela no GitHub!
