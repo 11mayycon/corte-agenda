@@ -31,6 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { clienteAPI, type Agendamento } from "@/services/clienteAPI";
+import { useAuthContext } from "@/contexts/AuthContext";
 
 type StatusType = "pendente" | "confirmado" | "cancelado" | "concluido" | "nao_compareceu";
 
@@ -44,6 +45,7 @@ const statusConfig: Record<StatusType, { label: string; icon: any; variant: any;
 
 export default function ClienteMinhasReservas() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [loading, setLoading] = useState(true);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [remarcarDialog, setRemarcarDialog] = useState(false);
@@ -52,12 +54,16 @@ export default function ClienteMinhasReservas() {
   const [novaHora, setNovaHora] = useState("");
 
   useEffect(() => {
-    loadAgendamentos();
-  }, []);
+    if (user) {
+      loadAgendamentos();
+    }
+  }, [user]);
 
   const loadAgendamentos = async () => {
+    if (!user) return;
+    
     setLoading(true);
-    const { data, error } = await clienteAPI.getAgendamentos();
+    const { data, error } = await clienteAPI.getMeusAgendamentos(user.id);
     if (!error && data) {
       setAgendamentos(data);
     }
@@ -90,15 +96,15 @@ export default function ClienteMinhasReservas() {
       return;
     }
 
-    const { error } = await clienteAPI.remarcarAgendamento(
-      selectedAgendamento.id,
-      novaData,
-      novaHora
-    );
-
+    // For now, cancel the old one and notify user to create new
+    // In future, implement a proper reschedule endpoint
+    const { error } = await clienteAPI.cancelarAgendamento(selectedAgendamento.id);
+    
     if (!error) {
+      toast.info('Agendamento cancelado. Por favor, crie um novo agendamento com a nova data.');
       setRemarcarDialog(false);
       await loadAgendamentos();
+      navigate('/cliente/agendar');
     }
   };
 

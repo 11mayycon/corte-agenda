@@ -16,6 +16,9 @@ import LoginUsuario from "./pages/login/LoginUsuario";
 import LoginCabeleireiro from "./pages/login/LoginCabeleireiro";
 import LoginAdministrador from "./pages/login/LoginAdministrador";
 
+// Cadastro Pages
+import CadastroUsuario from "./pages/cadastro/CadastroUsuario";
+
 // Client Pages
 import ClienteAgendar from "./pages/cliente/Agendar";
 import ClienteReservas from "./pages/cliente/MinhasReservas";
@@ -54,6 +57,9 @@ const App = () => (
             <Route path="/login/usuario" element={<LoginUsuario />} />
             <Route path="/login/cabeleireiro" element={<LoginCabeleireiro />} />
             <Route path="/login/administrador" element={<LoginAdministrador />} />
+
+            {/* Cadastro Routes */}
+            <Route path="/cadastro/usuario" element={<CadastroUsuario />} />
 
             {/* Client Routes */}
             <Route path="/cliente/agendar" element={<ClienteRoute><ClienteAgendar /></ClienteRoute>} />
