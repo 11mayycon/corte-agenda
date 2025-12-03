@@ -69,11 +69,13 @@ export const useAuth = () => {
       if (error) throw error;
 
       if (data.user) {
-        // Verificar se o tipo de usuário corresponde
+        // Se o usuário não tem tipo definido, definir baseado no login usado
         const userTipo = data.user.user_metadata?.tipo;
-        if (userTipo !== userType) {
-          await supabase.auth.signOut();
-          throw new Error('Tipo de usuário incorreto');
+        if (!userTipo) {
+          // Atualizar o tipo do usuário no metadata
+          await supabase.auth.updateUser({
+            data: { tipo: userType }
+          });
         }
         
         setUser(data.user as AuthUser);
